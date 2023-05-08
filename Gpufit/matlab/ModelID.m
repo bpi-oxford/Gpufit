@@ -13,6 +13,7 @@ classdef ModelID
         SPLINE_3D = 10
         SPLINE_3D_MULTICHANNEL = 11
         SPLINE_3D_PHASE_MULTICHANNEL = 12
+        SPIM_ACF = 13
     end
     methods (Static)
         function v = validID(id)

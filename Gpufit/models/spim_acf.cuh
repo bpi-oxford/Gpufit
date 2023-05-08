@@ -69,9 +69,9 @@ __device__ void calculate_spim_acf(
 
     REAL const pi = 3.14159f;
     REAL const sqrt_pi = sqrt(pi);
-    REAL const a = 0.24; // squared pixel size, in um
-    REAL const sigma_xy = 1; // radius of psf in xy plane
-    REAL const sigma_z = 1; // radius of psf in z plane
+    REAL const a = 0.24; // side length of square pixel in object space, in um
+    REAL const sigma_xy = 1.0; // radius of psf in xy plane
+    REAL const sigma_z = 1.0; // radius of psf in z plane
 
     // indices
 
@@ -94,24 +94,25 @@ __device__ void calculate_spim_acf(
 
     // value
     REAL const argxy = p[0]*x + pow(sigma_xy,2);
-    REAL const argz  = 1 + p[0]*x / pow(sigma_z,2);
+    REAL const argz  = 1.0 + p[0]*x / pow(sigma_z,2);
 
-    REAL const prefix = 4*pow(a,2)*sqrt_pi*p[1];
+    REAL const prefix = 4.0*pow(a,2)*sqrt_pi*p[1];
     REAL const z_xy = 0.5*a / sqrt(argxy);
-    REAL const g_xy = 2*a*erf(z_xy) + 4/sqrt_pi*sqrt(argxy)*(exp(-pow(z_xy,2))-1);
+    REAL const g_xy = 2.0*a*erf(z_xy) + 4.0/sqrt_pi*sqrt(argxy)*(exp(-pow(z_xy,2))-1.0);
 
-    REAL const pa_pD = -a*a/sqrt_pi * exp(-1.0*pow(z_xy,2))*pow(argxy,-3/2) * x;
-    REAL const pb_pD = 4/sqrt_pi * pow(argxy,-1/2) * ((0.5-a*a/(4*argxy))*exp(-a*a/(4*argxy))-0.5);
+    REAL const pa_pD = -a*a/sqrt_pi * exp(-1.0*pow(z_xy,2))*pow(argxy,-3.0/2.0) * x;
+    REAL const pb_pD = 4.0/sqrt_pi * pow(argxy,-0.5) * ((0.5+a*a/(4*argxy))*exp(-a*a/(4.0*argxy))-0.5);
     REAL const pgxy_pD = pa_pD + pb_pD;
 
-    value[point_index] = 1/prefix * g_xy*g_xy * pow(argz,-0.5) + p[2];
+    value[point_index] = 1.0/prefix * g_xy*g_xy * pow(argz,-0.5) + p[2];
 
     // derivatives
     REAL * current_derivatives = derivative + point_index;
     // D
-    current_derivatives[0 * n_points] = 1/prefix*2*g_xy*pgxy_pD*pow(argz,-0.5) + 1/prefix*g_xy*g_xy*(-0.5)*pow(argz,-3/2);
+    current_derivatives[0 * n_points] = 1.0/prefix*2.0*g_xy*pgxy_pD*pow(argz,-0.5) + 1/prefix*g_xy*g_xy*(-0.5)*pow(argz,-3.0/2.0)*x/pow(sigma_z,2);
     // N
-    current_derivatives[1 * n_points] = -1 * pow(prefix,-2)*(4*a*a*sqrt_pi)*pow(g_xy,2)*pow(z_xy,-0.5);
+    current_derivatives[1 * n_points] = -1.0 * pow(prefix,-2)*(4.0*a*a*sqrt_pi)*pow(g_xy,2.0)*pow(z_xy,-0.5);
+    // G_inf
     current_derivatives[2 * n_points] = 1.0;
 }
 

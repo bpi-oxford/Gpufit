@@ -31,13 +31,16 @@ def generate_spim_acf(p,tau,a=0.24,sigma_xy=1.0,sigma_z=1.0):
 
     arg_xy = D*tau + sigma_xy**2
     arg_z = 1.0 + D*tau/sigma_z**2
-    prefix = 4.0*a**2*math.sqrt(PI)*N
+    prefix = 4.0*(a**2)*math.sqrt(PI)*N
 
     term_a = 2.0*a*special.erf(0.5*a*arg_xy**(-1/2))
     term_b = 4.0*np.sqrt(arg_xy)/np.sqrt(PI) * (np.exp(-1.0 * a**2/(4.0*arg_xy))-1.0)
     g_xy = term_a+term_b
 
+    # print(prefix,term_a[0],term_b[0],g_xy[0])
+
     G = 1./prefix * (g_xy)**2 * np.power(arg_z,-0.5) + G_inf
+    # print(G[0])
     return G
 
 def main():
@@ -45,13 +48,13 @@ def main():
     print('CUDA available: {}'.format(gf.cuda_available()))
     print('CUDA versions runtime: {}, driver: {}'.format(*gf.get_cuda_version()))
 
-    N = 5e2
-    D = 1e3
+    D = 1e2
+    N = 1.0
     G_inf = 1e-6
 
     # number of fits, number of points per fit
-    number_fits = 200
-    number_points = 100
+    number_fits = 50
+    number_points = 50
 
     # model ID and number of parameter
     model_id = gf.ModelID.SPIM_ACF
@@ -65,7 +68,8 @@ def main():
 
     # initial parameters (relative randomized)
     initial_parameters = np.tile(true_parameters, (number_fits, 1))
-    initial_parameters *= 0.8 + 0.4*np.random.rand(number_fits,3)
+    perturb = 0.01
+    initial_parameters *= (1-perturb) + 2*perturb*np.random.rand(number_fits,3)
     
     # generate tau values
     tau = np.logspace(-5,3,number_points)
@@ -75,14 +79,14 @@ def main():
     data = np.tile(data, (number_fits,1))
 
     # add noise to data
-    snr = 1e6
+    snr = 1e5
     noise_std_dev = 1.0 / (snr * np.log(10.0))
     noise = noise_std_dev * np.random.standard_normal(data.shape)
     data = data + noise
     data = data.astype(np.float32)
 
     # tolerance
-    tolerance = 1e-10
+    tolerance = 1e-9
 
     # maximum number of iterations
     max_number_iterations = 500
@@ -99,7 +103,7 @@ def main():
         estimator_id, None)
 
     print(initial_parameters)
-    print(parameters)
+    print(parameters.shape)
 
     # print fit results
     converged = states == 0
@@ -135,12 +139,16 @@ def main():
     data_fit = np.asarray(data_fit)
 
     # make a figure of function values
-    fig, ax = plt.subplots()
-    ax.plot(np.tile(tau, (number_fits,1)).T, data.T, 's', color=(0.5,0.5,0.5), markersize=4, linewidth=1, label="noisy data")
-    ax.plot(np.tile(tau, (number_fits,1)).T, data_fit.T, '-', color=(0.0,0.0,0.0), markersize=4, linewidth=1, label="fit data")
-    ax.set_xscale('log')
-    ax.set_xlabel(r'$\tau[s]$')
-    ax.set_ylabel(r'$G(\tau)$')
+    fig, axs = plt.subplots(1,2)
+    axs[0].plot(np.tile(tau, (number_fits,1)).T, data.T, 's', color=(0.5,0.5,0.5), markersize=4, linewidth=1, label="noisy data")
+    axs[0].plot(np.tile(tau, (number_fits,1)).T, data_fit.T, '-', color=(0.0,0.0,0.0), markersize=4, linewidth=1, label="fit data")
+    axs[0].set_xscale('log')
+    axs[0].set_xlabel(r'$\tau[s]$')
+    axs[0].set_ylabel(r'$G(\tau)$')
+    axs[1].scatter(initial_parameters[:,0],parameters[:,0])
+    axs[1].set_xlabel("Initial fitting diffusivity")
+    axs[1].set_ylabel("Fitted diffusivity")
+
     # ax.legend()
     fig.tight_layout()
     save_path = "./spim_acf_fit.png"

@@ -101,7 +101,7 @@ __device__ void calculate_spim_acf(
     REAL const g_xy = 2.0*a*erf(z_xy) + 4.0/sqrt_pi*sqrt(argxy)*(exp(-pow(z_xy,2))-1.0);
 
     REAL const pa_pD = -a*a/sqrt_pi * exp(-1.0*pow(z_xy,2))*pow(argxy,-3.0/2.0) * x;
-    REAL const pb_pD = 4.0/sqrt_pi * pow(argxy,-0.5) * ((0.5+a*a/(4*argxy))*exp(-a*a/(4.0*argxy))-0.5);
+    REAL const pb_pD = 4.0/sqrt_pi * pow(argxy,-0.5) * x * ((0.5+pow(z_xy,2))*exp(-1.0*pow(z_xy,2))-0.5);
     REAL const pgxy_pD = pa_pD + pb_pD;
 
     value[point_index] = 1.0/prefix * g_xy*g_xy * pow(argz,-0.5) + p[2];
@@ -109,9 +109,9 @@ __device__ void calculate_spim_acf(
     // derivatives
     REAL * current_derivatives = derivative + point_index;
     // D
-    current_derivatives[0 * n_points] = 1.0/prefix*2.0*g_xy*pgxy_pD*pow(argz,-0.5) + 1/prefix*g_xy*g_xy*(-0.5)*pow(argz,-3.0/2.0)*x/pow(sigma_z,2);
+    current_derivatives[0 * n_points] = 1.0/prefix*2.0*g_xy*pgxy_pD*pow(argz,-0.5) + 1.0/prefix*g_xy*g_xy*(-0.5)*pow(argz,-3.0/2.0)*x/pow(sigma_z,2);
     // N
-    current_derivatives[1 * n_points] = -1.0 * pow(prefix,-2)*(4.0*a*a*sqrt_pi)*pow(g_xy,2.0)*pow(z_xy,-0.5);
+    current_derivatives[1 * n_points] = -1.0/(4.0*a*a*sqrt_pi) * pow(p[1],-2)*pow(g_xy,2.0)*pow(argz,-0.5);
     // G_inf
     current_derivatives[2 * n_points] = 1.0;
 }

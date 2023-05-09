@@ -7,11 +7,14 @@ Requires custom edited pyGpufit spim_acf function(https://github.com/bpi-oxford/
 
 import numpy as np
 import pygpufit.gpufit as gf
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import math
 from scipy import special
 
 PI= 3.14159
+E = 2.71828
 
 def generate_spim_acf(p,tau,a=0.24,sigma_xy=1.0,sigma_z=1.0):
     """
@@ -30,8 +33,8 @@ def generate_spim_acf(p,tau,a=0.24,sigma_xy=1.0,sigma_z=1.0):
     arg_z = 1.0 + D*tau/sigma_z**2
     prefix = 4.0*a**2*math.sqrt(PI)*N
 
-    term_a = 2*a*special.erf(0.5*a*arg_xy**(-1/2))
-    term_b = 4*np.sqrt(arg_xy)/np.sqrt(PI) * (np.exp(-1.0 * a**2/(4*arg_xy))-1)
+    term_a = 2.0*a*special.erf(0.5*a*arg_xy**(-1/2))
+    term_b = 4.0*np.sqrt(arg_xy)/np.sqrt(PI) * (np.exp(-1.0 * a**2/(4.0*arg_xy))-1.0)
     g_xy = term_a+term_b
 
     G = 1./prefix * (g_xy)**2 * np.power(arg_z,-0.5) + G_inf
@@ -42,8 +45,12 @@ def main():
     print('CUDA available: {}'.format(gf.cuda_available()))
     print('CUDA versions runtime: {}, driver: {}'.format(*gf.get_cuda_version()))
 
+    N = 400
+    D = 1
+    G_inf = 1e-6
+
     # number of fits, number of points per fit
-    number_fits = 1
+    number_fits = 10
     number_points = 100
 
     # model ID and number of parameter
@@ -51,7 +58,7 @@ def main():
     number_parameters = 3
 
     # true parameters
-    true_parameters = np.array((1,400,1), dtype=np.float32)
+    true_parameters = np.array((D,N,G_inf), dtype=np.float32)
 
     # initialize random number generator
     np.random.seed(0)
@@ -75,13 +82,14 @@ def main():
     data = data.astype(np.float32)
 
     # tolerance
-    tolerance = 1e-30
+    tolerance = 1e-5
 
     # maximum number of iterations
-    max_number_iterations = 100
+    max_number_iterations = 500
 
     # estimator ID
     estimator_id = gf.EstimatorID.LSE
+    # estimator_id = gf.EstimatorID.MLE
 
     # run Gpufit
     parameters, states, chi_squares, number_iterations, execution_time = gf.fit(
@@ -118,21 +126,21 @@ def main():
     converged_parameters_std = np.std(converged_parameters, axis=0)
     print('\nparameters of SPIM ACF')
     for i in range(number_parameters):
-        print('|p{} | true {:6.2f} | mean {:6.2f} | std {:6.2f}|'.format(i, true_parameters[i], converged_parameters_mean[i],
+        print('|p{} | true {:6.2E} | mean {:6.2E} | std {:6.2E}|'.format(i, true_parameters[i], converged_parameters_mean[i],
                                                                  converged_parameters_std[i]))
-    
     data_fit = generate_spim_acf(parameters[0],tau)
 
     # make a figure of function values
     fig, ax = plt.subplots()
     ax.plot(np.tile(tau, (number_fits,1)).T, data.T, 's', color=(0.5,0.5,0.5), markersize=4, linewidth=1, label="noisy data")
-    ax.plot(np.tile(tau, (number_fits,1)).T, data_fit.T, '-', color=(0.0,0.0,0.0), markersize=4, linewidth=1, label="noisy data")
+    ax.plot(np.tile(tau, (number_fits,1)).T, data_fit.T, '-', color=(0.0,0.0,0.0), markersize=4, linewidth=1, label="fit data")
     ax.set_xscale('log')
     ax.set_xlabel(r'$\tau[s]$')
     ax.set_ylabel(r'$G(\tau)$')
     # ax.legend()
     fig.tight_layout()
     save_path = "./spim_acf_fit.png"
+    print("\nSaving plot...")
     fig.savefig(save_path)
 
     # plot(x2, gauss_final_fit, '--.y', 'MarkerSize', 8, 'LineWidth', 2);
@@ -143,7 +151,7 @@ def main():
     # plot(x2, final_fit_gpufit,'--+b', 'MarkerSize', 8, 'LineWidth', 2);
     # plot(x2, spline_model, ':r', 'MarkerSize', 8, 'LineWidth', 1.5);
     # ylim([0, max(initial_spline_fit)]);
-    print("\nResults plot save to {}".format(save_path))
+    print("Results plot save to {}".format(save_path))
 
 if __name__=="__main__":
     main()

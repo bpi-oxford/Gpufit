@@ -45,12 +45,12 @@ def main():
     print('CUDA available: {}'.format(gf.cuda_available()))
     print('CUDA versions runtime: {}, driver: {}'.format(*gf.get_cuda_version()))
 
-    N = 400
-    D = 1
+    N = 5e2
+    D = 1e3
     G_inf = 1e-6
 
     # number of fits, number of points per fit
-    number_fits = 10
+    number_fits = 200
     number_points = 100
 
     # model ID and number of parameter
@@ -82,7 +82,7 @@ def main():
     data = data.astype(np.float32)
 
     # tolerance
-    tolerance = 1e-5
+    tolerance = 1e-10
 
     # maximum number of iterations
     max_number_iterations = 500
@@ -128,7 +128,11 @@ def main():
     for i in range(number_parameters):
         print('|p{} | true {:6.2E} | mean {:6.2E} | std {:6.2E}|'.format(i, true_parameters[i], converged_parameters_mean[i],
                                                                  converged_parameters_std[i]))
-    data_fit = generate_spim_acf(parameters[0],tau)
+    
+    data_fit = []
+    for param in parameters:
+        data_fit.append(generate_spim_acf(param,tau))
+    data_fit = np.asarray(data_fit)
 
     # make a figure of function values
     fig, ax = plt.subplots()

@@ -396,3 +396,31 @@ spline coefficients. The model function :code:`g` exists for each x,y,z coordina
 :`p_4`: offset
 
 :`p_5`: phase
+
+3D Autocorrelation Function (ACF) of Single Plane Illumination (SPIM) Fluorescence Correlation Spectroscopy (FCS)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+This function calculates the 3D autocorrelation function (ACF) of Single Plane Illumination (SPIM) Fluorescence Correlation Spectroscopy (FCS) defined as equation 6 
+[`Thorsten Wohland, Xianke Shi, Jagadish Sankaran, and Ernst H.K. Stelzer,  "Single Plane Illumination Fluorescence Correlation Spectroscopy (SPIM-FCS) probes inhomogeneous three-dimensional environments," Opt. Express 18, 10627-10641 (2010) <https://opg.optica.org/oe/fulltext.cfm?uri=oe-18-10-10627&id=199367>`_] and their partial derivatives with respect to the model parameters.
+
+.. math::
+
+    g_{i}(x,\vec{p})=\frac{g_{xy}^2\cdot}{A\sqrt{arg_z}} + p_2
+
+    arg_{xy} = p_0\cdot x+\sigma_{xy}^2
+
+    arg_z = 1+\frac{p_0\cdot x}{\sigma_z^2}
+
+    A = 4a^2\cdot\sqrt{\pi}\cdot p_1
+
+    z_{xy} = \frac{a}{2arg_{xy}}
+
+    g_{xy} = 2a\cdot erf(z_{xy}) + \frac{4\sqrt{\arg_{xy}}\cdot \left( e^{-z_{xy}^2}-1\right )}{\sqrt{\pi}}
+
+:`x`: (independent variables) *X* coordinates
+    The *X* coordinate values may be specified in the user information data.  For details, see the linear regression code example, :ref:`linear-regression-example`.
+
+:`p_0`: diffusion coefficient D
+
+:`p_1`: number of particles :math:`N =\left \langle C \right \rangle\cdot a^2\cdot 2\sigma_z`, where ⟨𝐶⟩ is the average concentration, a is the side length of a square pixel in object space, and 𝜎𝑧 is the 1/e2 radius of the Gaussian profile in z-direction. 
+:`p_2`: convergence value of the ACF for long times :math:`G_inf`, usually converge to value around 1

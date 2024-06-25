@@ -16,6 +16,7 @@
 #include "spline_3d_multichannel.cuh"
 #include "spline_3d_phase_multichannel.cuh"
 #include "spim_acf.cuh"
+#include "spim_acfN.cuh"
 
 __device__ void calculate_model(
     ModelID const model_id,
@@ -74,6 +75,9 @@ __device__ void calculate_model(
     case SPIM_ACF:
         calculate_spim_acf(parameters, n_fits, n_points, value, derivative, point_index, fit_index, chunk_index, user_info, user_info_size);
         break;
+    case SPIM_ACFN:
+        calculate_spim_acfN(parameters, n_fits, n_points, value, derivative, point_index, fit_index, chunk_index, user_info, user_info_size);
+        break;
     default:
         assert(0); // unknown model ID
     }
@@ -97,6 +101,7 @@ void configure_model(ModelID const model_id, int & n_parameters, int & n_dimensi
     case SPLINE_3D_MULTICHANNEL:         n_parameters = 5; n_dimensions = 4; break;
     case SPLINE_3D_PHASE_MULTICHANNEL:   n_parameters = 6; n_dimensions = 4; break;
     case SPIM_ACF:               n_parameters = 3; n_dimensions = 1; break;
+    case SPIM_ACFN:              n_parameters = 5; n_dimensions = 1; break;
     default: throw std::runtime_error("unknown model ID");
     }
 }

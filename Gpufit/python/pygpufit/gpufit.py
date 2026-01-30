@@ -62,6 +62,7 @@ class ModelID:
     SPLINE_3D_PHASE_MULTICHANNEL = 12
     SPIM_ACF = 13
     SPIM_ACFN = 14
+    SPIM_ACFN_2D = 15
 
 class EstimatorID:
     LSE = 0

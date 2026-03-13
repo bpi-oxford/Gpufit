@@ -1,28 +1,39 @@
 #ifndef GPUFIT_SPIMACFN_CUH_INCLUDED
 #define GPUFIT_SPIMACFN_CUH_INCLUDED
 
-/* Description of the calculate_spim_acf function
+/* Description of the calculate_spim_acfN function
 * ============================================================
 *
-* This function calculates the 3D autocorrelation function (ACF) of Single Plane Illumination (SPIM) 
-* Fluorescence Correlation Spectroscopy (FCS) defined as equation 6
-*  [Thorsten Wohland, Xianke Shi, Jagadish Sankaran, and Ernst H.K. Stelzer, 
-* "Single Plane Illumination Fluorescence Correlation Spectroscopy (SPIM-FCS) 
-* probes inhomogeneous three-dimensional environments," 
-* Opt. Express 18, 10627-10641 (2010)] and their partial derivatives
-* with respect to the model parameters.
+* This function calculates the 3D autocorrelation function (ACF) of Single Plane
+* Illumination (SPIM) Fluorescence Correlation Spectroscopy (FCS) and its partial
+* derivatives with respect to the model parameters.
+*
+* Model equation:
+*
+*   fac   = D * tau + sigma_xy^2
+*   u     = a / (2 * sqrt(fac))
+*   h(u)  = erf(u) + (exp(-u^2) - 1) / (u * sqrt(pi))
+*   argz  = sqrt(1 + D * tau / sigma_z^2)
+*   G(tau) = G_inf + h(u)^2 / (2 * sqrt(pi) * N * a^2 * argz)
+*
+* This is the same equation as the CPU model in core/models.py (SPIM_3D_Free branch),
+* confirmed by the identity  gxy = h^2 / a^2  and  gz = 1 / (2*sqrt(pi)*sqrt(argz)),
+* with the parameter relationship  GN0 (CPU) = 1 / N (GPU).
+*
+* See docs/SPIM_ACF_MODEL.md for derivation, conventions, and numerical verification.
+*
+* NOTE: This replaces the previous Wohland 2010 convention which used 4*D*tau
+* instead of D*tau. That convention caused degenerate fits (D -> 2e6 um^2/s)
+* because the GPU and CPU models had different functional shapes.
 *
 * Parameters:
 *
 * parameters: An input vector of model parameters.
-*             p[0]: diffusion coefficient D
-*             p[1]: number of particles $N =\left \langle C \right \rangle\cdot a^2\cdot 2\sigma_z$, 
-*                   where ⟨𝐶⟩ is the average concentration, 
-*                   a is the side length of a square pixel in object space, 
-*                   and 𝜎𝑧 is the 1/e2 radius of the Gaussian profile in z-direction. 
-*             p[2]: convergence value of the ACF for long times G_inf, usually converge to value around 1
-*             p[3]: sigma_xy
-*             p[4]: sigma_z
+*             p[0]: diffusion coefficient D  (um^2/s)
+*             p[1]: number of particles N = 1 / GN0
+*             p[2]: long-lag offset G_inf
+*             p[3]: lateral PSF 1/e^2 radius sigma_xy  (um)
+*             p[4]: axial    PSF 1/e^2 radius sigma_z   (um)
 *
 * n_fits: The number of fits. (not used)
 *
@@ -38,17 +49,15 @@
 *
 * chunk_index: The chunk index. (not used)
 *
-* user_info: An input vector containing user information. (not used)
+* user_info: An input vector of lag times tau (one per data point, in seconds).
 *
-* user_info_size: The size of user_info in bytes. (not used)
+* user_info_size: The size of user_info in bytes.
 *
-* Calling the calculate_spim_acf function
+* Calling the calculate_spim_acfN function
 * ====================================================
 *
-* This __device__ function can be only called from a __global__ function or an other
-* __device__ function.
-*
-* reference: https://github.com/ImagingFCS/Imaging_FCS_1_52/blob/main/agpufitjni.cu#L424
+* This __device__ function can be only called from a __global__ function or an
+* other __device__ function.
 */
 
 __device__ void calculate_spim_acfN(
@@ -64,21 +73,16 @@ __device__ void calculate_spim_acfN(
     std::size_t const user_info_size)
 {
     // parameters
-
     REAL const * p = parameters;
-    
-    // arguments
 
-    REAL const pi = 3.14159f;
+    // constants
+    REAL const pi      = 3.14159265358979f;
     REAL const sqrt_pi = sqrt(pi);
-    REAL const a = 0.145; // side length of square pixel in object space, in um
-    //REAL const sigma_xy = 1.0; // radius of psf in xy plane
-    //REAL const sigma_z = 1.0; // radius of psf in z plane
+    REAL const a       = 0.145f; // pixel side length in object space (um)
 
-    // indices
-
+    // read lag time x = tau from user_info
     REAL * user_info_float = (REAL*) user_info;
-    REAL x = 0; // lagged time tau
+    REAL x = 0;
     if (!user_info_float)
     {
         x = point_index;
@@ -90,39 +94,67 @@ __device__ void calculate_spim_acfN(
     else if (user_info_size / sizeof(REAL) > n_points)
     {
         int const chunk_begin = chunk_index * n_fits * n_points;
-        int const fit_begin = fit_index * n_points;
+        int const fit_begin   = fit_index * n_points;
         x = user_info_float[chunk_begin + fit_begin + point_index];
     }
 
-    // value
+    // -----------------------------------------------------------------------
+    // Intermediate variables (see docs/SPIM_ACF_MODEL.md §4)
+    // -----------------------------------------------------------------------
     REAL const sigma_xy = p[3];
-    REAL const sigma_z = p[4];
-    REAL const argxy = 4.0*p[0]*x + pow(sigma_xy,2);
-    REAL const argz  = 1.0 + 4.0*p[0]*x / pow(sigma_z,2);
+    REAL const sigma_z  = p[4];
 
-    REAL const prefix = sqrt_pi*p[1];
-    REAL const z_xy = a / sqrt(argxy);
-    REAL const g_xy = erf(z_xy) + sqrt(argxy)/a/ sqrt_pi *(exp(-pow(z_xy,2))-1.0);
+    REAL const fac   = p[0]*x + sigma_xy*sigma_xy;          // D*tau + wxy^2
+    REAL const u     = a / (2.0f * sqrt(fac));               // a/(2*sqrt(fac))
+    REAL const eu2   = exp(-u*u);                            // exp(-u^2)
+    REAL const h     = erf(u) + (eu2 - 1.0f)/(u * sqrt_pi); // h(u)
+    REAL const argz  = sqrt(1.0f + p[0]*x / (sigma_z*sigma_z)); // sqrt(1 + D*tau/wz^2)
+    REAL const A     = 1.0f / (2.0f * sqrt_pi * p[1] * a*a); // 1/(2*sqrt_pi*N*a^2)
 
-    REAL const pa_pD = -a/sqrt_pi * exp(-1.0*pow(z_xy,2))*pow(argxy,-3.0/2.0) * 4.0*x;
-    REAL const pb_pD = 4.0*x/a/sqrt_pi * pow(argxy,-0.5) * ((0.5+pow(z_xy,2))*exp(-pow(z_xy,2))-0.5);
-    REAL const pgxy_pD = pa_pD + pb_pD;
+    // -----------------------------------------------------------------------
+    // Model value
+    // G(tau) = G_inf + h^2 / (2*sqrt_pi * N * a^2 * argz)
+    //        = G_inf + A * h^2 / argz
+    // -----------------------------------------------------------------------
+    value[point_index] = p[2] + A * h*h / argz;
 
-    value[point_index] = 1.0/prefix * g_xy*g_xy * pow(argz,-0.5) + p[2]; // this the total correlation function
+    // -----------------------------------------------------------------------
+    // Partial derivatives
+    //
+    // Shared chain-rule pieces:
+    //   dh_du    = (1 - eu2) / (u^2 * sqrt_pi)
+    //   du_dD    = -a*x    / (4 * fac^(3/2))
+    //   du_dwxy  = -a*wxy  / (2 * fac^(3/2))
+    // -----------------------------------------------------------------------
+    REAL const dh_du   = (1.0f - eu2) / (u*u * sqrt_pi);
+    REAL const fac32   = fac * sqrt(fac);                    // fac^(3/2)
+    REAL const du_dD   = -a * x          / (4.0f * fac32);
+    REAL const du_dwxy = -a * sigma_xy   / (2.0f * fac32);
 
-    // derivatives
     REAL * current_derivatives = derivative + point_index;
-    // D
-    current_derivatives[0 * n_points] = 1.0/prefix*2.0*g_xy*pgxy_pD*pow(argz,-0.5) + 1.0/prefix*g_xy*g_xy*(-0.5)*pow(argz,-3.0/2.0)*4.0*x/pow(sigma_z,2);
-    
-    // N
-    current_derivatives[1 * n_points] = -1.0/sqrt_pi*pow(p[1],-2)*pow(g_xy,2.0)*pow(argz,-0.5);
-    // G_inf
-    current_derivatives[2 * n_points] = 1.0;
-    // sigma_xy
-    current_derivatives[3 * n_points] = 2.0*(exp(-pow(z_xy,2))-1.0)*p[3]*g_xy/(a*p[1]*pi*pow(argxy,0.5)*pow(argz,0.5));
-    // sigma_z
-    current_derivatives[4 * n_points] = 4.0*p[0]*x*pow(g_xy,2)/(p[1]*sqrt_pi*pow(p[4],3)*pow(argz,1.5));
+
+    // dG/dD
+    //   = A * (2*h*dh_du*du_dD / argz  -  h^2 * x / (2*wz^2 * argz^3))
+    current_derivatives[0 * n_points] =
+        A * (2.0f*h*dh_du*du_dD / argz
+             - h*h * x / (2.0f * sigma_z*sigma_z * argz*argz*argz));
+
+    // dG/dN
+    //   = -h^2 / (2*sqrt_pi * N^2 * a^2 * argz)
+    //   = -A/N * h^2 / argz
+    current_derivatives[1 * n_points] = -(A / p[1]) * h*h / argz;
+
+    // dG/dG_inf
+    current_derivatives[2 * n_points] = 1.0f;
+
+    // dG/d(sigma_xy)
+    //   = A * 2*h*dh_du*du_dwxy / argz
+    current_derivatives[3 * n_points] = A * 2.0f*h*dh_du*du_dwxy / argz;
+
+    // dG/d(sigma_z)
+    //   = A * h^2 * D*x / (sigma_z^3 * argz^3)
+    current_derivatives[4 * n_points] =
+        A * h*h * p[0]*x / (sigma_z*sigma_z*sigma_z * argz*argz*argz);
 }
 
 #endif

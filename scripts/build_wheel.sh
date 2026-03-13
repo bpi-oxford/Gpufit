@@ -85,7 +85,7 @@ docker run --rm \
       -DCMAKE_BUILD_TYPE=Release \
       -DCUDA_ARCH=${CUDA_ARCH}
     cmake --build /build/gpufit --config Release --parallel ${JOBS_EXPR}
-    WHEEL=\$(find /build/gpufit -name 'pyGpufit*.whl' -print -quit 2>/dev/null || true)
+    WHEEL=\$(find /build/gpufit -name '*.whl' -print -quit 2>/dev/null || true)
     [ -z \"\${WHEEL}\" ] && { echo '[build_wheel] ERROR: no .whl found.' >&2; exit 1; }
     cp \"\${WHEEL}\" /dist/gpufit/
     echo \"[build_wheel] wheel ready: \$(basename \${WHEEL})\"

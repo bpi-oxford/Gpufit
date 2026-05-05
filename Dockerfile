@@ -5,17 +5,17 @@
 # The built wheel is written to a bind-mounted /dist/gpufit.
 #
 # Build the image:
-#   docker build --build-arg CUDA_VERSION=12.4.0 -t gpufit-builder:12.4.0 .
+#   docker build --build-arg CUDA_VERSION=12.6.0 -t gpufit-builder:12.6.0 .
 #
 # Or via the helper script (recommended):
 #   bash scripts/build_wheel.sh
 #
 # CUDA version / driver requirements:
+#   CUDA 12.6 → driver >= 560.28 (Linux) / 560.76 (Windows)
 #   CUDA 12.4 → driver >= 550.54 (Linux) / 551.61 (Windows)
-#   CUDA 11.8 → driver >= 520.61 (Linux) / 522.06 (Windows)
 
-ARG CUDA_VERSION=12.4.0
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
+ARG CUDA_VERSION=12.6.0
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
